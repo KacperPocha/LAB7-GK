@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Texture Mapping and Transformations</title>
+<link rel="stylesheet" href="../demo.css">
+<style>
+#textureCanvas {
+    background-image: url("textures/NightEarth-512x256.jpg");
+    background-size: 100px 100px;
+}
+</style>
+<script src="./script/demo-core.js"></script>
+<script src="./script/glsim.js"></script>
+<script src="./script/teapot-model-IFS.js"></script>
+<script src="./script/basic-object-models-IFS.js"></script>
+<script src="./script/slider-canvas.js"></script>
+<script>
+
+var cameraControl;
+var textureContext;  
+var animationFrame = 0;  
+var models = {};
+var sliders = {};
+var transform = {
+    scale: 1,
+    translateX: 0,
+    translateY: 0,
+    rotate: 0
+};
+var texturesLoading = true;
+var textures = [];
+var textureSources = [
+    "textures/brick001.jpg",
+    "textures/Earth-1024x512.jpg",
+    "textures/NightEarth-512x256.jpg",
+    "textures/marble.jpg",
+    "textures/metal003.gif",
+    "textures/mandelbrot.jpeg",
+    "textures/zad/brick.jpg",
+    "textures/zad/clouds.jpg",
+    "textures/zad/earth.jpg"
+];
+
+function renderScene() {
+    transform.scale = sliders.scale.value(0);
+    transform.rotate = sliders.rotate.value(0);
+    transform.translateX = sliders.translateX.value(0);
+    transform.translateY = sliders.translateY.value(0);
+
+    renderTextureCanvas();
+
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    if (texturesLoading) {
+        return;
+    }
+    
+    var textureIndex = Number(document.getElementById("textureSelector").value);
+    var modelIndex = Number(document.getElementById("objectSelector").value);
+    var image = textures[textureIndex];
+    glEnable(GL_TEXTURE_2D);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    
+    glMatrixMode(GL_TEXTURE);
+    glLoadIdentity();
+    glTranslatef(transform.translateX, transform.translateY, 0);
+    glRotatef(transform.rotate, 0, 0, 1);
+    glScalef(transform.scale, transform.scale, 1);
+    glMatrixMode(GL_MODELVIEW);
+    
+    cameraControl.apply();
+    
+    switch(modelIndex) {
+    case 0:
+        glRotatef(-90, 1, 0, 0);
+        glScalef(1.5, 1.5, 1.5);
+        drawModel(models.sphere);
+        break;
+    case 1:
+        glScalef(1.2, 1.2, 1.2);
+        drawModel(models.cube);
+        break;
+    case 2:
+        glRotatef(-90, 1, 0, 0);
+        glScalef(1.3, 1.3, 1.3);
+        drawModel(models.cylinder);
+        break;
+    case 3:
+        glRotatef(-90, 1, 0, 0);
+        glScalef(1.3, 1.3, 1.3);
+        drawModel(models.cone);
+        break;
+    case 4:
+        glScalef(1.6, 1.6, 1.6);
+        drawModel(models.torus);
+        break;
+    case 5:
+        glScalef(0.06, 0.06, 0.06);
+        drawModel(models.teapot);
+        break;
+    case 6:
+        glRotatef(-90, 1, 0, 0);
+        glScalef(0.6, 0.6, 0.6);
+        drawModel(models.pyramid);
+        break;
+    }
+}
+
+function renderTextureCanvas() {
+    if (texturesLoading) {
+        textureContext.fillStyle = "white";
+        textureContext.fillRect(0, 0, 300, 300);
+        textureContext.fillStyle = "black";
+        textureContext.font = "14px serif";
+        textureContext.fillText("Loading textures...", 10, 40);
+        return;
+    }
+    textureContext.clearRect(0, 0, 300, 300);
+    textureContext.save();
+    textureContext.translate(100, 200);
+    textureContext.scale(1, -1);
+    textureContext.translate(transform.translateX * 100, transform.translateY * 100);
+    textureContext.rotate(transform.rotate / 180 * Math.PI);
+    textureContext.scale(transform.scale, transform.scale);
+    textureContext.lineWidth = 5 / transform.scale;
+    textureContext.strokeStyle = "white";
+    textureContext.strokeRect(-.5, -.5, 100, 100);
+    textureContext.lineWidth = 1 / transform.scale;
+    textureContext.strokeStyle = "black";
+    textureContext.strokeRect(-.5, -.5, 100, 100);
+    textureContext.restore();
+}
+
+function drawModel(model) {
+    glEnableClientState(GL_VERTEX_ARRAY);
+    glVertexPointer(3, GL_FLOAT, 0, model.vertexPositions);
+    glEnableClientState(GL_NORMAL_ARRAY);
+    glNormalPointer(GL_FLOAT, 0, model.vertexNormals);
+    glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+    glTexCoordPointer(2, GL_FLOAT, 0, model.vertexTextureCoords);
+    glDrawElements(GL_TRIANGLES, model.indices.length, GL_UNSIGNED_BYTE, model.indices);
+    glDisableClientState(GL_VERTEX_ARRAY);
+    glDisableClientState(GL_NORMAL_ARRAY);
+    glDisableClientState(GL_TEXTURE_COORD_ARRAY);    
+}
+
+function initializeGL() {
+    glEnable(GL_LIGHTING);
+    glEnable(GL_LIGHT0);
+    glEnable(GL_NORMALIZE);
+    glEnable(GL_DEPTH_TEST);
+    glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, [1, 1, 1, 1]);
+    glClearColor(0, 0, 0, 1);
+}
+
+function loadTextureImages() {
+    var loadedCount = 0;
+    for (var i = 0; i < textureSources.length; i++) {
+        textures[i] = new Image();
+        textures[i].onload = onImageLoad;
+        textures[i].src = textureSources[i];
+    }
+    function onImageLoad() {
+        loadedCount++;
+        if (loadedCount == textureSources.length) {
+            texturesLoading = false;
+            glEnable(GL_TEXTURE_2D);
+            var texIndex = Number(document.getElementById("textureSelector").value);
+            var image = textures[texIndex];
+            try {
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image);
+            } catch (e) {
+                document.getElementById("headline").innerHTML = "Cannot access texture.<br>Some browsers may not support local file textures.";
+                return;
+            }
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            renderScene();
+            document.getElementById("objectSelector").disabled = false;
+            document.getElementById("textureSelector").disabled = false;
+        }
+    }
+}
+
+function switchTexture() {
+    var texIndex = Number(document.getElementById("textureSelector").value);
+    document.getElementById("textureCanvas").style.backgroundImage = "url('" + textureSources[texIndex] + "')";
+    var image = textures[texIndex];
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image);
+    renderScene();
+}
+
+function resetTransformations() {
+    sliders.rotate.setValue(0, 0);
+    sliders.scale.setValue(0, 1);
+    sliders.translateX.setValue(0, 0);
+    sliders.translateY.setValue(0, 0);
+    cameraControl.lookAt(10, 7, 20);
+    renderScene();
+}
+
+function initialize() {
+    try {
+        glsimUse("mainCanvas");
+        var texCanvas = document.getElementById("textureCanvas");
+        textureContext = texCanvas.getContext('2d');
+    } catch (e) {
+        document.getElementById("canvasHolder").innerHTML = "<p><b>Error occurred:<br>" + e + "</b></p>";
+        return;
+    }
+    document.getElementById("resetButton").onclick = resetTransformations;
+    document.getElementById("objectSelector").value = "1";
+    document.getElementById("objectSelector").onchange = renderScene;
+    document.getElementById("textureSelector").value = "2";
+    document.getElementById("textureSelector").onchange = switchTexture;
+    document.getElementById("objectSelector").disabled = true;
+    document.getElementById("textureSelector").disabled = true;
+    
+    sliders.rotate = new SliderCanvas(document.getElementById("scaleRotate"));
+    sliders.rotate.addSlider({label: "rotate", min: -180, max: 180, value: 0});
+    sliders.scale = new SliderCanvas(document.getElementById("scaleScale"));
+    sliders.scale.addSlider({label: "scale", min: 0.5, max: 2, step: 0.01, value: 1, decimals: 2});
+    sliders.translateX = new SliderCanvas(document.getElementById("scaleTransX"));
+    sliders.translateX.addSlider({label: "x-trans.", min: -0.5, max: 0.5, step: 0.01, value: 0, decimals: 2});
+    sliders.translateY = new SliderCanvas(document.getElementById("scaleTransY"));
+    sliders.translateY.addSlider({label: "y-trans.", min: -0.5, max: 0.5, step: 0.01, value: 0, decimals: 2});
+    
+    sliders.rotate.onChange = renderScene;
+    sliders.scale.onChange = renderScene;
+    sliders.translateX.onChange = renderScene;
+    sliders.translateY.onChange = renderScene;
+    
+    initializeGL();
+    cameraControl = new Camera();
+    cameraControl.setScale(1);
+    cameraControl.lookAt(10, 7, 20);
+    cameraControl.installTrackball(renderScene);
+    models.sphere = uvSphere();
+    models.cube = cube();
+    models.cylinder = uvCylinder();
+    models.cone = uvCone();
+    models.torus = uvTorus();
+    models.teapot = teapotModel;
+    models.pyramid = uvPyramid(2, 3, 6);
+    
+    sliders.rotate.draw();
+    sliders.scale.draw();
+    sliders.translateX.draw();
+    sliders.translateY.draw();
+    renderTextureCanvas();
+    loadTextureImages();
+}
+
+</script>
+</head>
+<body onload="initialize()">
+
+<div id="content">
+<h3 id="headline">Texture Mapping and Transformations</h3>
+<table border="0" cellspacing="0" cellpadding="8">
+<tr>
+<td><div id="canvasHolder"><canvas id="textureCanvas" width="300" height="300"></canvas></div></td>
+<td><canvas id="mainCanvas" width="300" height="300"></canvas></td>
+</tr>
+<tr align="center">
+<td colspan="2">
+    <b>Texture:</b>
+    <select id="textureSelector">
+        <option value="0">Brick</option>
+        <option value="1">Topographic Earth</option>
+        <option value="2">Earth At Night</option>
+        <option value="3">Marble</option>
+        <option value="4">Metal</option>
+        <option value="5">Mandelbrot</option>
+        <option value="6">Zad - Brick</option>
+        <option value="7">Zad - Clouds</option>
+        <option value="8">Zad - Earth</option>
+    </select>
+    <b style="margin-left:40px">Object:</b>
+    <select id="objectSelector">
+       <option value="0">Sphere</option>
+       <option value="1">Cube</option>
+       <option value="2">Cylinder</option>
+       <option value="3">Cone</option>
+       <option value="4">Torus</option>
+       <option value="5">Teapot</option>
+       <option value="6">Pyramid</option>
+    </select>
+    <button id="resetButton" style="margin-left:40px">Reset</button>
+</td>
+</tr>
+<tr align=center>
+<td>
+    <canvas id="scaleScale" width="280" height="50"></canvas>
+</td>
+<td>
+    <canvas id="scaleTransX" width="280" height="50"></canvas>
+</td>
+</tr>
+<tr align=center>
+<td>
+    <canvas id="scaleRotate" width="280" height="50"></canvas>
+</td>
+<td>
+    <canvas id="scaleTransY" width="280" height="50"></canvas>
+</td>
+</tr>
+</table>
+
+</div>
+
+
+<div id="helpBG" style="display:none"></div>
+</body>
+</html>
